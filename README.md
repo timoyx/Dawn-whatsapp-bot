@@ -61,6 +61,8 @@ Webhook URL for Meta:
 
 ### 2. Supabase secrets
 
+Non-secret settings (`WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_VERIFY_TOKEN`, `ADMIN_NUMBERS`, `BUSINESS_NAME`, and the optional ones) can live in the `settings` table instead; a Supabase secret with the same name wins. Only `WHATSAPP_TOKEN`, `WHATSAPP_APP_SECRET`, `ANTHROPIC_API_KEY` and `ADMIN_PASSWORD` must be secrets.
+
 Supabase dashboard → project **Dawn WhatsApp Bot** → **Edge Functions → Secrets**, add:
 
 | Name | Value |

@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2.119.0";
-import { config } from "./config.ts";
+import { config, setDbSettings } from "./config.ts";
 
 let client: SupabaseClient | null = null;
 export function db(): SupabaseClient {
@@ -90,4 +90,14 @@ export async function undoKnowledge(): Promise<string | null> {
   const [latest, previous] = data;
   await saveKnowledge(previous.content, `Undid: ${latest.summary ?? "last change"}`, "undo");
   return latest.summary ?? "last change";
+}
+
+let settingsLoadedAt = 0;
+/** Loads the `settings` table into config (cached for a minute). */
+export async function loadSettings() {
+  if (Date.now() - settingsLoadedAt < 60_000) return;
+  const { data, error } = await db().from("settings").select("key, value");
+  if (error) throw error;
+  setDbSettings(Object.fromEntries((data ?? []).map((r) => [r.key, r.value])));
+  settingsLoadedAt = Date.now();
 }

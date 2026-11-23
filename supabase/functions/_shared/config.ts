@@ -1,7 +1,16 @@
 // All settings come from Supabase secrets (Dashboard > Edge Functions > Secrets).
 
+// Non-secret settings can also live in the `settings` table (see loadSettings).
+// A Supabase secret with the same name always wins.
+let dbSettings: Record<string, string> = {};
+export function setDbSettings(s: Record<string, string>) { dbSettings = s; }
+
+function get(name: string): string | undefined {
+  return Deno.env.get(name) || dbSettings[name] || undefined;
+}
+
 function env(name: string, fallback?: string): string {
-  const v = Deno.env.get(name) ?? fallback;
+  const v = get(name) ?? fallback;
   if (v === undefined || v === "") throw new Error(`Missing secret: ${name}`);
   return v;
 }
@@ -31,7 +40,7 @@ export const config = {
   get ownerName() { return env("OWNER_NAME", "Dawn"); },
   /** Personal numbers allowed to update the bot by WhatsApp, comma separated. */
   get adminNumbers(): string[] {
-    return (Deno.env.get("ADMIN_NUMBERS") ?? "")
+    return (get("ADMIN_NUMBERS") ?? "")
       .split(",").map(normalizeNumber).filter(Boolean);
   },
   /** How long the bot stays quiet in a chat after Dawn replies there herself. */

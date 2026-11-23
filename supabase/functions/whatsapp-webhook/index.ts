@@ -5,7 +5,7 @@
 
 import { config, normalizeNumber } from "../_shared/config.ts";
 import {
-  currentKnowledge, isPaused, pauseBot, recentMessages, saveKnowledge,
+  currentKnowledge, isPaused, loadSettings, pauseBot, recentMessages, saveKnowledge,
   saveMessage, undoKnowledge, upsertContact,
 } from "../_shared/db.ts";
 import { answerCustomer, applyUpdate } from "../_shared/ai.ts";
@@ -203,6 +203,7 @@ async function processPayload(payload: { object?: string; entry?: { changes?: { 
 
 Deno.serve(async (req) => {
   const url = new URL(req.url);
+  await loadSettings();
 
   if (req.method === "GET") {
     const ok = url.searchParams.get("hub.mode") === "subscribe" &&

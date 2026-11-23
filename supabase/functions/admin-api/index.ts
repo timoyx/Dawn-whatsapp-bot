@@ -1,7 +1,7 @@
 // Small JSON API for the admin web page. Protected by ADMIN_PASSWORD.
 
 import { config } from "../_shared/config.ts";
-import { currentKnowledge, db, pauseBot, saveKnowledge, saveMessage, undoKnowledge } from "../_shared/db.ts";
+import { currentKnowledge, db, loadSettings, pauseBot, saveKnowledge, saveMessage, undoKnowledge } from "../_shared/db.ts";
 import { sendText } from "../_shared/whatsapp.ts";
 
 const cors = {
@@ -23,6 +23,7 @@ function passwordOk(given: string | null): boolean {
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: cors });
+  await loadSettings();
   if (!passwordOk(req.headers.get("x-admin-password"))) return json({ error: "Wrong password" }, 401);
 
   const url = new URL(req.url);
