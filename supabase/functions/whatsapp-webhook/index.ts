@@ -192,8 +192,6 @@ async function processPayload(payload: { object?: string; entry?: { changes?: { 
         }
       }
 
-      // Coexistence: Dawn replied from the WhatsApp Business app on her phone.
-      // Store it, and pause the bot for that customer so they don't both talk.
       // Delivery receipts. Log failures so we can see why a reply didn't arrive.
       for (const st of v.statuses ?? []) {
         if (st.status === "failed") {
@@ -203,6 +201,8 @@ async function processPayload(payload: { object?: string; entry?: { changes?: { 
         }
       }
 
+      // Coexistence: Dawn replied from the WhatsApp Business app on her phone.
+      // Store it, and pause the bot for that customer so they don't both talk.
       if (change.field === "smb_message_echoes" && v.message_echoes) {
         for (const m of v.message_echoes) {
           const customer = m.to;
