@@ -39,6 +39,7 @@
   <nav class="tabs" id="tabs">
     <button data-tab="info" class="on">Bot info</button>
     <button data-tab="chats">Chats</button>
+    <button data-tab="try">Try it</button>
   </nav>
 </header>
 <main>
@@ -79,6 +80,18 @@
       </div>
     </div>
   </section>
+  <section id="try" class="hidden">
+    <div class="card">
+      <p class="muted">Chat with the bot as if you were a customer. Nothing is sent on WhatsApp or saved. It uses the current Bot info.</p>
+      <div id="tryMsgs"></div>
+      <textarea id="tryText" placeholder="e.g. Berapa harga tinting untuk Myvi?" style="min-height:70px;margin-top:10px;font-family:inherit"></textarea>
+      <div class="row">
+        <button class="btn primary" id="trySend">Send</button>
+        <button class="btn" id="tryClear">Start over</button>
+        <span class="muted" id="tryMsg" style="align-self:center"></span>
+      </div>
+    </div>
+  </section>
 </main>
 
 <script src="config.js"></script>
@@ -107,7 +120,7 @@ async function api(action, { params = {}, body } = {}) {
 }
 
 function show(tab) {
-  for (const s of ["login", "info", "chats"]) $(s).classList.toggle("hidden", s !== tab);
+  for (const s of ["login", "info", "chats", "try"]) $(s).classList.toggle("hidden", s !== tab);
   for (const b of $("tabs").children) b.classList.toggle("on", b.dataset.tab === tab);
   if (tab === "info") loadInfo();
   if (tab === "chats") loadChats();
@@ -183,6 +196,30 @@ $("toggleBtn").onclick = async () => {
   current.bot_paused_until = hours ? new Date(Date.now() + hours * 3600e3).toISOString() : null;
   openChat(current);
 };
+
+let tryHistory = [];
+function drawTry() {
+  $("tryMsgs").innerHTML = tryHistory.map((m) =>
+    `<div class="msg ${m.sender === "customer" ? "in" : "out"}">${esc(m.body)}${m.note ? `<small>${esc(m.note)}</small>` : ""}</div>`).join("")
+    || '<p class="muted">No messages yet.</p>';
+}
+$("trySend").onclick = async () => {
+  const text = $("tryText").value.trim();
+  if (!text) return;
+  const history = tryHistory.slice();
+  tryHistory.push({ sender: "customer", body: text });
+  $("tryText").value = ""; drawTry(); $("tryMsg").textContent = "Bot is typing…";
+  try {
+    const r = await api("test", { body: { text, history } });
+    tryHistory.push(r.reply
+      ? { sender: "bot", body: r.reply, note: r.handoff ? `Would hand over to Dawn: ${r.handoff_reason}` : "" }
+      : { sender: "bot", body: "(No answer. On WhatsApp the customer would be told Dawn will reply.)" });
+    $("tryMsg").textContent = "";
+  } catch (e) { $("tryMsg").textContent = "Error: " + e.message; }
+  drawTry();
+};
+$("tryClear").onclick = () => { tryHistory = []; drawTry(); };
+drawTry();
 
 setInterval(() => { if (current && !$("chatView").classList.contains("hidden") && !$("replyText").value) openChat(current); }, 15000);
 if (!API) document.body.innerHTML = "<main><p>Missing apiUrl in config.js</p></main>";

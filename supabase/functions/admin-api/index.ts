@@ -3,6 +3,7 @@
 import { config } from "../_shared/config.ts";
 import { currentKnowledge, db, loadSettings, pauseBot, saveKnowledge, saveMessage, undoKnowledge } from "../_shared/db.ts";
 import { sendText } from "../_shared/whatsapp.ts";
+import { answerCustomer } from "../_shared/ai.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -79,6 +80,18 @@ Deno.serve(async (req) => {
         }
         await pauseBot(wa_id, config.ownerPauseHours);
         return json({ ok: true });
+      }
+      case "test": {
+        // Try the bot as a customer, without WhatsApp. Nothing is stored or sent.
+        const text = String(body.text ?? "").trim();
+        if (!text) return json({ error: "Missing text" }, 400);
+        const history = (Array.isArray(body.history) ? body.history : []).slice(-12)
+          .map((m: { sender?: string; body?: string }) => ({
+            sender: m.sender === "customer" ? "customer" : "bot", body: String(m.body ?? ""),
+          }));
+        const k = await currentKnowledge();
+        const r = await answerCustomer(k.content, history, text);
+        return json(r ?? { reply: null });
       }
       default:
         return json({ error: "Unknown action" }, 400);
