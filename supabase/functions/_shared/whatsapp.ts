@@ -1,4 +1,4 @@
-import { encodeBase64 } from "jsr:@std/encoding@1.0.10/base64";
+import { decodeBase64, encodeBase64 } from "jsr:@std/encoding@1.0.10/base64";
 import { config } from "./config.ts";
 
 const graph = (path: string) => `https://graph.facebook.com/${config.graphVersion}/${path}`;
@@ -75,6 +75,31 @@ export async function downloadMedia(mediaId: string): Promise<{ data: string; mi
   const file = await graphFetch(meta.url, { headers: { "Content-Type": "" } });
   const bytes = new Uint8Array(await file.arrayBuffer());
   return { data: encodeBase64(bytes), mimeType: meta.mime_type ?? "image/jpeg" };
+}
+
+/** Re-uploads an image (e.g. a customer's screenshot) and sends it to someone else. */
+export async function forwardImage(to: string, image: { data: string; mimeType: string }, caption: string) {
+  const form = new FormData();
+  form.append("messaging_product", "whatsapp");
+  form.append("type", image.mimeType);
+  form.append("file", new Blob([decodeBase64(image.data)], { type: image.mimeType }), "screenshot");
+  const up = await fetch(graph(`${config.waPhoneNumberId}/media`), {
+    method: "POST",
+    headers: { Authorization: `Bearer ${config.waToken}` },
+    body: form,
+  });
+  if (!up.ok) throw new Error(`WhatsApp media upload ${up.status}: ${await up.text()}`);
+  const { id } = await up.json();
+  await graphFetch(graph(`${config.waPhoneNumberId}/messages`), {
+    method: "POST",
+    body: JSON.stringify({
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to,
+      type: "image",
+      image: { id, caption: caption.slice(0, 1000) },
+    }),
+  });
 }
 
 /** Checks Meta's X-Hub-Signature-256 header so only Meta can call the webhook. */

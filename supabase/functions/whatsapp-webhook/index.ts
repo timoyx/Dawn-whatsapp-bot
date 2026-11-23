@@ -9,7 +9,7 @@ import {
   saveMessage, saveSetting, undoKnowledge, upsertContact,
 } from "../_shared/db.ts";
 import { answerCustomer, applyUpdate } from "../_shared/ai.ts";
-import { downloadMedia, markReadAndTyping, sendText, subscribeWaba, verifySignature } from "../_shared/whatsapp.ts";
+import { downloadMedia, forwardImage, markReadAndTyping, sendText, subscribeWaba, verifySignature } from "../_shared/whatsapp.ts";
 
 declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void };
 
@@ -63,9 +63,12 @@ async function reply(to: string, body: string, sender: "bot" | "admin" = "bot") 
 
 /** Tell Dawn's admin number(s) a customer needs her. Free-form messages only
  *  arrive if she has messaged the bot in the last 24h, so failures are expected. */
-async function notifyAdmins(text: string) {
+async function notifyAdmins(text: string, image?: { data: string; mimeType: string }) {
   for (const admin of config.adminNumbers) {
-    try { await sendText(admin, text); } catch (e) { console.warn("admin notify failed", admin, e); }
+    try {
+      if (image) await forwardImage(admin, image, text);
+      else await sendText(admin, text);
+    } catch (e) { console.warn("admin notify failed", admin, e); }
   }
 }
 
@@ -138,19 +141,24 @@ async function handleCustomer(m: WaMessage) {
   const history = await recentMessages(from, 12);
   // The latest message is already stored; don't send it twice.
   const earlier = history.slice(0, -1);
-  const r = await answerCustomer(k.content, earlier, describe(m));
+  // Let the AI see photos (e.g. a screenshot of a booking in the Jacar app).
+  let image: { data: string; mimeType: string } | undefined;
+  if (m.type === "image" && m.image) {
+    try { image = await downloadMedia(m.image.id); } catch (e) { console.warn("download failed", e); }
+  }
+  const r = await answerCustomer(k.content, earlier, describe(m), image);
 
   if (!r) {
     await reply(from, `Thanks for your message! ${config.ownerName} will get back to you shortly. 🙏`);
     await pauseBot(from, config.ownerPauseHours);
-    await notifyAdmins(`🔔 Customer +${from} needs you (the bot couldn't answer): "${describe(m)}"`);
+    await notifyAdmins(`🔔 Customer +${from} needs you (the bot couldn't answer): "${describe(m)}"`, image);
     return;
   }
 
   await reply(from, r.reply);
   if (r.handoff) {
     await pauseBot(from, config.ownerPauseHours);
-    await notifyAdmins(`🔔 Customer +${from} needs you: ${r.handoff_reason}\nThey said: "${describe(m)}"\nThe bot is paused for them for ${config.ownerPauseHours}h. Send RESUME ${from} to turn it back on.`);
+    await notifyAdmins(`🔔 Customer +${from} needs you: ${r.handoff_reason}\nThey said: "${describe(m)}"\nThe bot is paused for them for ${config.ownerPauseHours}h. Send RESUME ${from} to turn it back on.`, image);
   }
 }
 
