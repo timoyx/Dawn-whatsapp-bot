@@ -95,3 +95,10 @@ export async function verifySignature(rawBody: string, header: string | null): P
   for (let i = 0; i < expected.length; i++) diff |= expected.charCodeAt(i) ^ given.charCodeAt(i);
   return diff === 0;
 }
+
+/** Links the WhatsApp Business Account to this app so Meta forwards live
+ *  messages to our webhook (POST /{waba-id}/subscribed_apps). */
+export async function subscribeWaba(wabaId: string) {
+  const res = await graphFetch(graph(`${wabaId}/subscribed_apps`), { method: "POST" });
+  return await res.json();
+}

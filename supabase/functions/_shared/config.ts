@@ -28,6 +28,8 @@ export const config = {
   get waToken() { return env("WHATSAPP_TOKEN"); },
   get waPhoneNumberId() { return env("WHATSAPP_PHONE_NUMBER_ID"); },
   get waAppSecret() { return env("WHATSAPP_APP_SECRET"); },
+  get wabaId(): string | undefined { return get("WHATSAPP_BUSINESS_ACCOUNT_ID"); },
+  get wabaSubscribed(): boolean { return get("WABA_SUBSCRIBED") === "yes"; },
   get waVerifyToken() { return env("WHATSAPP_VERIFY_TOKEN"); },
   get graphVersion() { return env("GRAPH_API_VERSION", "v24.0"); },
 

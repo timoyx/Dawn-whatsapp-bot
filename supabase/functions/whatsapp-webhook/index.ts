@@ -6,10 +6,10 @@
 import { config, normalizeNumber } from "../_shared/config.ts";
 import {
   currentKnowledge, isPaused, loadSettings, pauseBot, recentMessages, saveKnowledge,
-  saveMessage, undoKnowledge, upsertContact,
+  saveMessage, saveSetting, undoKnowledge, upsertContact,
 } from "../_shared/db.ts";
 import { answerCustomer, applyUpdate } from "../_shared/ai.ts";
-import { downloadMedia, markReadAndTyping, sendText, verifySignature } from "../_shared/whatsapp.ts";
+import { downloadMedia, markReadAndTyping, sendText, subscribeWaba, verifySignature } from "../_shared/whatsapp.ts";
 
 declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void };
 
@@ -201,9 +201,23 @@ async function processPayload(payload: { object?: string; entry?: { changes?: { 
   }
 }
 
+/** One-time: make sure Meta forwards live messages for this WhatsApp account. */
+async function ensureSubscribed() {
+  const waba = config.wabaId;
+  if (!waba || config.wabaSubscribed) return;
+  try {
+    const result = await subscribeWaba(waba);
+    console.log("subscribed_apps", JSON.stringify(result));
+    if (result?.success) await saveSetting("WABA_SUBSCRIBED", "yes");
+  } catch (e) {
+    console.error("subscribed_apps failed", e);
+  }
+}
+
 Deno.serve(async (req) => {
   const url = new URL(req.url);
   await loadSettings();
+  EdgeRuntime.waitUntil(ensureSubscribed());
 
   if (req.method === "GET") {
     const ok = url.searchParams.get("hub.mode") === "subscribe" &&

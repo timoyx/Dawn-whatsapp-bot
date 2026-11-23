@@ -101,3 +101,10 @@ export async function loadSettings() {
   setDbSettings(Object.fromEntries((data ?? []).map((r) => [r.key, r.value])));
   settingsLoadedAt = Date.now();
 }
+
+export async function saveSetting(key: string, value: string) {
+  const { error } = await db().from("settings")
+    .upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: "key" });
+  if (error) throw error;
+  settingsLoadedAt = 0;
+}
