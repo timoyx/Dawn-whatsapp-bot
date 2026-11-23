@@ -1,0 +1,7 @@
+# Meta and the admin page call these functions without a Supabase JWT.
+# Each function checks its own secret instead (Meta's signature / admin password).
+[functions.whatsapp-webhook]
+verify_jwt = false
+
+[functions.admin-api]
+verify_jwt = false

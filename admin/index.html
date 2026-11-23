@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Bot Admin</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --text:#1b1f24; --muted:#667085; --line:#e4e7ec; --accent:#128c7e; --warn:#b54708; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#111418; --card:#1a1f25; --text:#e8eaed; --muted:#98a2b3; --line:#2b323b; --accent:#25d366; --warn:#f79009; } }
+  * { box-sizing: border-box; }
+  body { margin:0; font:16px/1.45 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:var(--bg); color:var(--text); }
+  header { position:sticky; top:0; background:var(--card); border-bottom:1px solid var(--line); padding:12px 16px; display:flex; gap:8px; align-items:center; z-index:2; }
+  header h1 { font-size:17px; margin:0; flex:1; }
+  main { max-width:760px; margin:0 auto; padding:16px; }
+  .tabs button { background:none; border:0; padding:6px 10px; border-radius:8px; color:var(--muted); font:inherit; cursor:pointer; }
+  .tabs button.on { background:var(--bg); color:var(--text); font-weight:600; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; margin-bottom:14px; }
+  textarea { width:100%; min-height:55vh; font:14px/1.5 ui-monospace, Menlo, monospace; padding:10px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--text); }
+  input { width:100%; font:inherit; padding:10px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--text); }
+  .row { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+  .btn { font:inherit; padding:9px 14px; border-radius:8px; border:1px solid var(--line); background:var(--card); color:var(--text); cursor:pointer; }
+  .btn.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .muted { color:var(--muted); font-size:14px; }
+  .chat { display:flex; justify-content:space-between; gap:8px; padding:10px 0; border-bottom:1px solid var(--line); cursor:pointer; }
+  .chat:last-child { border-bottom:0; }
+  .tag { font-size:12px; padding:2px 8px; border-radius:99px; background:var(--bg); color:var(--warn); white-space:nowrap; align-self:center; }
+  .msg { max-width:85%; padding:8px 10px; border-radius:10px; margin:6px 0; white-space:pre-wrap; word-wrap:break-word; }
+  .msg.in { background:var(--bg); }
+  .msg.out { background:color-mix(in srgb, var(--accent) 16%, transparent); margin-left:auto; }
+  .msg small { display:block; color:var(--muted); font-size:11px; margin-top:2px; }
+  ul.hist { padding-left:18px; margin:6px 0 0; } ul.hist li { margin:3px 0; }
+  .hidden { display:none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🤖 Bot Admin</h1>
+  <nav class="tabs" id="tabs">
+    <button data-tab="info" class="on">Bot info</button>
+    <button data-tab="chats">Chats</button>
+  </nav>
+</header>
+<main>
+  <section id="login" class="card hidden">
+    <p>Enter the admin password.</p>
+    <input id="pw" type="password" autocomplete="current-password">
+    <div class="row"><button class="btn primary" id="loginBtn">Open</button></div>
+    <p class="muted" id="loginErr"></p>
+  </section>
+
+  <section id="info" class="hidden">
+    <div class="card">
+      <p class="muted">Everything the bot knows. Edit and press Save. Customers see the change straight away.<br>Tip: you can also WhatsApp updates to the bot from your admin number.</p>
+      <textarea id="content" spellcheck="false"></textarea>
+      <input id="summary" placeholder="What did you change? (optional)" style="margin-top:8px">
+      <div class="row">
+        <button class="btn primary" id="saveBtn">Save</button>
+        <button class="btn" id="undoBtn">Undo last change</button>
+        <span class="muted" id="saveMsg" style="align-self:center"></span>
+      </div>
+    </div>
+    <div class="card"><strong>Recent changes</strong><ul class="hist" id="hist"></ul></div>
+  </section>
+
+  <section id="chats" class="hidden">
+    <div class="card" id="chatList"></div>
+    <div class="card hidden" id="chatView">
+      <div class="row" style="margin-top:0">
+        <button class="btn" id="backBtn">← Back</button>
+        <button class="btn" id="toggleBtn"></button>
+      </div>
+      <h3 id="chatTitle" style="margin:12px 0 4px"></h3>
+      <div id="msgs"></div>
+      <textarea id="replyText" placeholder="Type a reply…" style="min-height:80px;margin-top:10px;font-family:inherit"></textarea>
+      <div class="row">
+        <button class="btn primary" id="sendBtn">Send</button>
+        <span class="muted" id="sendMsg" style="align-self:center">Replying pauses the bot for this chat.</span>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script src="config.js"></script>
+<script>
+const API = (window.BOT_CONFIG || {}).apiUrl;
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+};
+let password = store.get("botpw") || "";
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" }[c]));
+const when = (t) => t ? new Date(t).toLocaleString() : "";
+
+async function api(action, { params = {}, body } = {}) {
+  const q = new URLSearchParams({ action, ...params });
+  const res = await fetch(`${API}?${q}`, {
+    method: body ? "POST" : "GET",
+    headers: { "x-admin-password": password, "content-type": "application/json" },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (res.status === 401) { showLogin("Wrong password."); throw new Error("auth"); }
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || res.status);
+  return data;
+}
+
+function show(tab) {
+  for (const s of ["login", "info", "chats"]) $(s).classList.toggle("hidden", s !== tab);
+  for (const b of $("tabs").children) b.classList.toggle("on", b.dataset.tab === tab);
+  if (tab === "info") loadInfo();
+  if (tab === "chats") loadChats();
+}
+function showLogin(err = "") { $("loginErr").textContent = err; show("login"); }
+
+$("loginBtn").onclick = () => { password = $("pw").value; store.set("botpw", password); show("info"); };
+$("pw").onkeydown = (e) => { if (e.key === "Enter") $("loginBtn").onclick(); };
+for (const b of $("tabs").children) b.onclick = () => password ? show(b.dataset.tab) : showLogin();
+
+async function loadInfo() {
+  const d = await api("knowledge");
+  $("content").value = d.content;
+  $("hist").innerHTML = (d.history || []).map((h) =>
+    `<li>${esc(h.summary || "(no note)")} <span class="muted">· ${esc(h.source)} · ${when(h.created_at)}</span></li>`).join("");
+}
+$("saveBtn").onclick = async () => {
+  $("saveMsg").textContent = "Saving…";
+  try {
+    await api("save", { body: { content: $("content").value, summary: $("summary").value } });
+    $("summary").value = ""; $("saveMsg").textContent = "Saved ✓"; loadInfo();
+  } catch (e) { $("saveMsg").textContent = "Error: " + e.message; }
+};
+$("undoBtn").onclick = async () => {
+  const d = await api("undo", { body: {} });
+  $("saveMsg").textContent = d.undone ? "Undone: " + d.undone : "Nothing to undo";
+  loadInfo();
+};
+
+let current = null;
+const paused = (c) => c.bot_paused_until && new Date(c.bot_paused_until) > new Date();
+
+async function loadChats() {
+  $("chatView").classList.add("hidden"); $("chatList").classList.remove("hidden");
+  const { chats } = await api("chats");
+  $("chatList").innerHTML = chats.length ? chats.map((c, i) => `
+    <div class="chat" data-i="${i}">
+      <div><strong>${esc(c.name || "+" + c.wa_id)}</strong><br><span class="muted">+${esc(c.wa_id)} · ${when(c.last_customer_msg_at)}</span></div>
+      ${paused(c) ? '<span class="tag">You\'re handling</span>' : ""}
+    </div>`).join("") : '<p class="muted">No chats yet.</p>';
+  for (const el of $("chatList").querySelectorAll(".chat")) el.onclick = () => openChat(chats[el.dataset.i]);
+}
+
+async function openChat(c) {
+  current = c;
+  $("chatList").classList.add("hidden"); $("chatView").classList.remove("hidden");
+  $("chatTitle").textContent = c.name ? `${c.name} (+${c.wa_id})` : "+" + c.wa_id;
+  $("toggleBtn").textContent = paused(c) ? "▶️ Turn bot back on" : "⏸️ Pause bot for this chat";
+  const { messages } = await api("messages", { params: { wa_id: c.wa_id } });
+  const who = { customer: "Customer", bot: "Bot", owner: "You", admin: "Admin" };
+  $("msgs").innerHTML = messages.map((m) =>
+    `<div class="msg ${m.direction}">${esc(m.body)}<small>${who[m.sender] || m.sender} · ${when(m.created_at)}</small></div>`).join("");
+}
+$("backBtn").onclick = loadChats;
+$("sendBtn").onclick = async () => {
+  const text = $("replyText").value.trim();
+  if (!text) return;
+  $("sendMsg").textContent = "Sending…";
+  try {
+    await api("send", { body: { wa_id: current.wa_id, text } });
+    $("replyText").value = ""; $("sendMsg").textContent = "Sent ✓";
+    current.bot_paused_until = new Date(Date.now() + 12 * 3600e3).toISOString();
+    openChat(current);
+  } catch (e) {
+    $("sendMsg").textContent = /24|131047|re-engage/i.test(e.message)
+      ? "Can't send: more than 24h since the customer last wrote. Ask them to message again."
+      : "Error: " + e.message;
+  }
+};
+$("toggleBtn").onclick = async () => {
+  const hours = paused(current) ? null : 24 * 30;
+  await api("pause", { body: { wa_id: current.wa_id, hours } });
+  current.bot_paused_until = hours ? new Date(Date.now() + hours * 3600e3).toISOString() : null;
+  openChat(current);
+};
+
+setInterval(() => { if (current && !$("chatView").classList.contains("hidden") && !$("replyText").value) openChat(current); }, 15000);
+if (!API) document.body.innerHTML = "<main><p>Missing apiUrl in config.js</p></main>";
+else password ? show("info") : showLogin();
+</script>
+</body>
+</html>
